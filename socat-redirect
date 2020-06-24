@@ -1,0 +1,34 @@
+#!/bin/ash
+
+HOST_DOMAIN="${HOST_DOMAIN:-host.docker.internal}"
+RUN_USER="${RUN_USER:-redirect}"
+IS_GAWK="${IS_GAWK:-}"
+
+if [ "${SRC_PORT}" = "" ] ; then 
+  echo "Must specify SRC_PORT environment variable!"
+  exit 1
+fi
+
+if [ "${DST_ADDR}" = "" ] ; then 
+  echo "Must specify DST_ADDR environment variable (host:port)!"
+  exit 1
+fi
+
+
+exec_socat() {
+  exec socat tcp-listen:"${SRC_PORT}",reuseaddr,fork,su="${RUN_USER}" tcp:"${DST_ADDR}"
+}
+
+
+grep -q $HOST_DOMAIN /etc/hosts && exec_socat
+
+AWK_OPTIONS=""
+
+if [ "${IS_GAWK}" ] ; then
+  AWK_OPTIONS=--non-decimal-data
+fi
+
+HOST_IP="$(awk ${AWK_OPTIONS} </proc/net/route '/^\S+\s+00000000/ {printf("%d.%d.%d.%d","0x" substr($3,7,2), "0x" substr($3,5,2), "0x" substr($3,3,2), "0x" substr($3,1,2))}')"
+echo -e "$HOST_IP\t$HOST_DOMAIN" >> /etc/hosts
+
+exec_socat
